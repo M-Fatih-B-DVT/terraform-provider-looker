@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 
+	"github.com/devoteamgcloud/terraform-provider-looker/pkg/lookergo"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
@@ -130,7 +132,27 @@ func resourceTheme() *schema.Resource {
 }
 
 func resourceThemeCreate(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
+	// Makes a POST request to the API using the looker sdk
 	c := m.(*Config).Api // .(*lookergo.Client)
+	tflog.Info(ctx, "Creating Looker theme")
+
+	theme := lookergo.Theme{
+		// inspired by resource_folder.go
+		// What about the other fields ?
+		Name: d.Get("name").(string),
+		ID:   d.Get("id").(string),
+	}
+
+	newTheme, _, err := c.Theme.Create(ctx, &theme)
+
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	d.SetId(newTheme.ID)
+	d.Set("name", newTheme.Name)
+
+	tflog.Info(ctx, "Created Looker Theme", map[string]interface{}{"id": newTheme.ID, "name": newTheme.Name})
 	return resourceModelSetRead(ctx, d, m)
 }
 

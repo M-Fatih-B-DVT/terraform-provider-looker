@@ -1,8 +1,8 @@
 package lookergo
 
 import (
-	"time"
 	"context"
+	"time"
 )
 
 const themeBasePath = "4.0/theme"
@@ -16,7 +16,7 @@ type ThemeResource interface {
 	Delete(ctx context.Context, themeId string) (*Response, error)
 }
 
-type ThemeOp struct {
+type ThemeResourceOp struct {
 	client *Client
 }
 
@@ -25,7 +25,7 @@ type Theme struct {
 	Can      map[string]bool `json:"can,omitempty"`      // Operations the current user is able to perform on this object
 	BeginAt  *time.Time      `json:"begin_at,omitempty"` // Timestamp for when this theme becomes active. Null=always
 	EndAt    *time.Time      `json:"end_at,omitempty"`   // Timestamp for when this theme expires. Null=never
-	Id       string          `json:"id,omitempty"`       // Unique Id
+	ID       string          `json:"id,omitempty"`       // Unique Id
 	Name     string          `json:"name,omitempty"`     // Name of theme. Can only be alphanumeric and underscores.
 	Settings ThemeSettings   `json:"settings,omitempty"` // ThemeSettings is defined below
 }
@@ -48,4 +48,24 @@ type ThemeSettings struct {
 	Warn_button_color     string `json:"warn_button_color"`
 	Tile_title_alignment  string `json:"tile_title_alignment"`
 	Tile_shadow           bool   `json:"tile_shadow"`
+}
+
+func (t ThemeResourceOp) List(ctx context.Context) ([]Theme, *Response, error) {
+	return doList(ctx, t.client, themeBasePath, nil, new([]Theme))
+}
+
+func (t ThemeResourceOp) Get(ctx context.Context, themeId string) (*Theme, *Response, error) {
+	return doGetById(ctx, t.client, themeBasePath, themeId, new(Theme))
+}
+
+func (t ThemeResourceOp) Create(ctx context.Context, theme *Theme) (*Theme, *Response, error) {
+	return doCreate(ctx, t.client, themeBasePath, theme, new(Theme))
+}
+
+func (t ThemeResourceOp) Update(ctx context.Context, themeId string, theme *Theme) (*Theme, *Response, error) {
+	return doUpdate(ctx, t.client, themeBasePath, themeId, theme, new(Theme))
+}
+
+func (t ThemeResourceOp) Delete(ctx context.Context, themeId string) (*Response, error) {
+	return doDelete(ctx, t.client, themeBasePath, themeId)
 }
