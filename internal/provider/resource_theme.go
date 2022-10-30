@@ -38,7 +38,7 @@ func resourceTheme() *schema.Resource {
 				// https://developer.hashicorp.com/terraform/plugin/sdkv2/schemas/schema-types#date-time-data
 				Type: schema.TypeString,
 				ValidateFunc: validation.IsRFC3339Time, 
-			}
+			},
 		},
 	},
 }
