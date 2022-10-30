@@ -84,6 +84,7 @@ func New(version string) func() *schema.Provider {
 				"looker_lookml_model":           resourceLookMlModel(),
 				"looker_model_set":              resourceModelSet(),
 				"looker_folder":                 resourceFolder(),
+				"looker_theme":                  resourceTheme(),
 			},
 		}
 

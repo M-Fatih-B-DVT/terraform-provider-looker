@@ -76,6 +76,7 @@ type Client struct {
 	ModelSets   ModelSetsResource
 	Connections ConnectionsResource
 	LookMLModel LookMlModelsResource
+	// Theme		ThemeResource
 
 	// TODO: Expand
 
