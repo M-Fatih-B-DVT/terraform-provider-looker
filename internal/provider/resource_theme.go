@@ -153,17 +153,17 @@ func resourceThemeCreate(ctx context.Context, d *schema.ResourceData, m interfac
 	d.Set("name", newTheme.Name)
 
 	tflog.Info(ctx, "Created Looker Theme", map[string]interface{}{"id": newTheme.ID, "name": newTheme.Name})
-	return resourceModelSetRead(ctx, d, m)
+	return resourceThemeRead(ctx, d, m)
 }
 
 func resourceThemeRead(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
-	return resourceModelSetRead(ctx, d, m)
+	return diags
 }
 
 func resourceThemeUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
-	return resourceModelSetRead(ctx, d, m)
+	return resourceThemeRead(ctx, d, m)
 }
 
 func resourceThemeDelete(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
-	return resourceModelSetRead(ctx, d, m)
+	return resourceThemeRead(ctx, d, m)
 }
