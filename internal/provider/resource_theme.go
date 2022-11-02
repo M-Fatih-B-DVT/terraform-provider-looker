@@ -4,10 +4,14 @@ import (
 	"context"
 
 	"github.com/devoteamgcloud/terraform-provider-looker/pkg/lookergo"
+	
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+
+	rtl "github.com/looker-open-source/sdk-codegen/go/rtl"
+	v4 "github.com/looker-open-source/sdk-codegen/go/sdk/v4"
 )
 
 func resourceTheme() *schema.Resource {
@@ -136,7 +140,7 @@ func resourceThemeCreate(ctx context.Context, d *schema.ResourceData, m interfac
 	c := m.(*Config).Api // .(*lookergo.Client)
 	tflog.Info(ctx, "Creating Looker theme")
 
-	theme := lookergo.Theme{
+	theme := v4.Theme{
 		// inspired by resource_folder.go
 		// What about the other fields ?
 		Name: d.Get("name").(string),
