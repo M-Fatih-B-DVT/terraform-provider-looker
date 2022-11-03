@@ -2,16 +2,15 @@ package provider
 
 import (
 	"context"
+	"regexp"
+	"time"
 
-	"github.com/devoteamgcloud/terraform-provider-looker/pkg/lookergo"
-	
+	lookergo "github.com/devoteamgcloud/terraform-provider-looker/pkg/lookergo"
+
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-
-	rtl "github.com/looker-open-source/sdk-codegen/go/rtl"
-	v4 "github.com/looker-open-source/sdk-codegen/go/sdk/v4"
 )
 
 func resourceTheme() *schema.Resource {
@@ -26,30 +25,44 @@ func resourceTheme() *schema.Resource {
 		// The resource schema is based on the request body for a POST call:
 		// https://developers.looker.com/api/explorer/4.0/methods/Theme/create_theme?sdk=go
 		Schema: map[string]*schema.Schema{
-			"id": {
+			"Can": {
+				Type: schema.TypeMap,
+				Elem: &schema.Schema{
+					Type: schema.TypeBool,
+				},
+				Computed: true,
+			},
+			"Id": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"name": {
+			"Name": {
 				Description: "Name for Theme of LookML Models",
 				Type:        schema.TypeString,
 				Required:    true,
+				ValidateFunc: validation.StringMatch(
+					func() *regexp.Regexp {
+						ret, _ := regexp.Compile("^[a-zA-Z0-9_]+$")
+						return ret
+					}(),
+					"Name can only contain alphanumeric characters or underscores",
+				),
 			},
-			"begin_at": {
+			"Begin_at": {
 				Description: "Timestamp for when this theme becomes active. Null=always",
 				// use TypeString for time:
 				// https://developer.hashicorp.com/terraform/plugin/sdkv2/schemas/schema-types#date-time-data
 				Type:         schema.TypeString,
 				ValidateFunc: validation.IsRFC3339Time,
 			},
-			"end_at": {
+			"End_at": {
 				Description: "Timestamp for when this theme expires. Null=never",
 				// use TypeString for time:
 				// https://developer.hashicorp.com/terraform/plugin/sdkv2/schemas/schema-types#date-time-data
 				Type:         schema.TypeString,
 				ValidateFunc: validation.IsRFC3339Time,
 			},
-			"settings": {
+			"Settings": {
 				// Inspired by the trigger-template block from the cloud build trigger resource from the official google provider
 				// https://github.com/hashicorp/terraform-provider-google/blob/main/google/resource_cloudbuild_trigger.go
 				// https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger#trigger_template
@@ -59,72 +72,72 @@ func resourceTheme() *schema.Resource {
 				MaxItems:    1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"background_color": {
+						"Background_color": {
 							Type:        schema.TypeString,
 							Description: "Default background color",
 						},
-						"base_font_size": {
+						"Base_font_size": {
 							Type:        schema.TypeString,
 							Description: "Base font size for scaling fonts (only supported by legacy dashboards)",
 						},
-						"color_collection_id": {
+						"Color_collection_id": {
 							Type:        schema.TypeString,
 							Description: "Optional. ID of color collection to use with the thme. Use an empty String for none",
 							Optional:    true,
 						},
-						"font_color": {
+						"Font_color": {
 							Description: "Default font color",
 							Type:        schema.TypeString,
 						},
-						"font_family": {
+						"Font_family": {
 							Description: "Source specification for font",
 							Type:        schema.TypeString,
 						},
-						"font_source": {
+						"Font_source": {
 							Description: "Source specification for font",
 							Type:        schema.TypeString,
 						},
-						"info_button_color": {
+						"Info_button_color": {
 							Description: "info button color",
 							Type:        schema.TypeString,
 						},
-						"primary_button_color": {
+						"Primary_button_color": {
 							Type:        schema.TypeString,
 							Description: "Primary button color",
 						},
-						"show_filters_bar": {
+						"Show_filters_bar": {
 							Description: "Toggle to show filters. Defaults to true",
 							Type:        schema.TypeBool,
 						},
-						"show_title": {
+						"Show_title": {
 							Description: "Toggle to show title. Defaults to true",
 							Type:        schema.TypeBool,
 						},
-						"text_tile_text_color": {
+						"Text_tile_text_color": {
 							Description: "Text color for text tiles",
 							Type:        schema.TypeString,
 						},
-						"tile_background_color": {
+						"Tile_background_color": {
 							Description: "Background color for tiles",
 							Type:        schema.TypeString,
 						},
-						"tile_text_color": {
+						"Tile_text_color": {
 							Description: "Text folor for tiles",
 							Type:        schema.TypeString,
 						},
-						"title_color": {
+						"Title_color": {
 							Description: "Color for titles",
 							Type:        schema.TypeString,
 						},
-						"warn_button_color": {
+						"Warn_button_color": {
 							Description: "Warning button color",
 							Type:        schema.TypeString,
 						},
-						"tile_title_alignment": {
+						"Tile_title_alignment": {
 							Description: "The text alignment of tile titles (New Dashboards)",
 							Type:        schema.TypeString,
 						},
-						"tile_shadow": {
+						"Tile_shadow": {
 							Type:        schema.TypeBool,
 							Description: "Toggles the tile shadow (not supported)",
 						},
@@ -136,31 +149,73 @@ func resourceTheme() *schema.Resource {
 }
 
 func resourceThemeCreate(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
-	// Makes a POST request to the API using the looker sdk
+	// prepare connection to API
 	c := m.(*Config).Api // .(*lookergo.Client)
 	tflog.Info(ctx, "Creating Looker theme")
 
-	theme := v4.Theme{
-		// inspired by resource_folder.go
-		// What about the other fields ?
-		Name: d.Get("name").(string),
-		ID:   d.Get("id").(string),
+	// prepare request body
+	theme := lookergo.WriteTheme{
+		Name: castToPtr(d.Get("Name").(string)),
 	}
 
+	if t, isNotNil := d.GetOk("Begin_at"); isNotNil {
+		tmp, _ := time.Parse(time.RFC3339, t.(string))
+		theme.BeginAt = castToPtr(tmp)
+	}
+
+	if t, isNotNil := d.GetOk("End_at"); isNotNil {
+		tmp, _ := time.Parse(time.RFC3339, t.(string))
+		theme.EndAt = castToPtr(tmp)
+	}
+
+	if settings, isNotNil := d.GetOk("Settings"); isNotNil {
+		l := settings.([]interface{})                // Settings is a list of a single map[string]interface{}
+		settingsMap := l[0].(map[string]interface{}) //
+
+		themeSettings := lookergo.ThemeSettings{}
+
+		for key, elem := range settingsMap {
+			// SetField uses reflect, which is relatively inefficient.
+			// key is the name of the json field.
+			SetField(&themeSettings, key, castToPtr(elem))
+		}
+
+		theme.Settings = &themeSettings
+	}
+
+	// Makes a POST request to the API using the looker sdk
 	newTheme, _, err := c.Theme.Create(ctx, &theme)
 
 	if err != nil {
 		return diag.FromErr(err)
 	}
 
-	d.SetId(newTheme.ID)
-	d.Set("name", newTheme.Name)
+	// Id and Can are Computed fields
+	d.SetId(*newTheme.Id)
+	d.Set("Can", *newTheme.Can)
 
-	tflog.Info(ctx, "Created Looker Theme", map[string]interface{}{"id": newTheme.ID, "name": newTheme.Name})
+	tflog.Info(ctx, "Created Looker Theme", map[string]interface{}{"id": *newTheme.Id, "name": *newTheme.Name})
 	return resourceThemeRead(ctx, d, m)
 }
 
 func resourceThemeRead(ctx context.Context, d *schema.ResourceData, m interface{}) (diags diag.Diagnostics) {
+	// prepare connection to API
+	c := m.(*Config).Api // .(*lookergo.Client)
+
+	theme, _, err := c.Theme.Get(ctx, d.Id())
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	// Transfer remote changes to terraform state
+	d.Set("Id", *theme.Id)
+	d.Set("Can", *theme.Can)
+	d.Set("Name", *theme.Name)
+	d.Set("Begin_at", *theme.BeginAt)
+	d.Set("End_at", *theme.EndAt)
+	//might need flattening
+	d.Set("Settings", *theme.Settings)
+
 	return diags
 }
 
