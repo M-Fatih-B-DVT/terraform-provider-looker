@@ -59,10 +59,11 @@ func New(version string) func() *schema.Provider {
 				},
 			},
 			DataSourcesMap: map[string]*schema.Resource{
-				"looker_user":    dataSourceUser(),
-				"looker_group":   dataSourceGroup(),
-				"looker_project": dataSourceProject(),
-				"looker_folder":  dataSourceFolder(),
+				"looker_user":           dataSourceUser(),
+				"looker_group":          dataSourceGroup(),
+				"looker_project":        dataSourceProject(),
+				"looker_folder":         dataSourceFolder(),
+				"looker_permission_set": dataSourcePermissionSet(),
 			},
 			ResourcesMap: map[string]*schema.Resource{
 				"looker_user":                   resourceUser(),
@@ -78,6 +79,7 @@ func New(version string) func() *schema.Provider {
 				"looker_model_set":              resourceModelSet(),
 				"looker_folder":                 resourceFolder(),
 				"looker_color_collection":       resourceColorCollection(),
+				"looker_permission_set":         resourcePermissionSet(),
 			},
 		}
 
