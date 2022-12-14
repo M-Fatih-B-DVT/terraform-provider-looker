@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"strings"
 )
 
 func resourceProjectGitRepo() *schema.Resource {
@@ -25,7 +26,17 @@ func resourceProjectGitRepo() *schema.Resource {
 				Type: schema.TypeString, Required: true,
 			},
 			"git_username": {
-				Type: schema.TypeString, Optional: true,
+				Type:     schema.TypeString,
+				Optional: true,
+				Description: "Git username for HTTPS authentication. For SSH authentication " +
+					"skip this option and create project_git_deploy_key resource.",
+			},
+			"git_password": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Description: "Git password for HTTPS authentication. For SSH authentication " +
+					"skip this option and create project_git_deploy_key resource.",
+				Sensitive: true,
 			},
 			"use_git_cookie_auth": {
 				Type: schema.TypeBool, Optional: true,
@@ -57,6 +68,22 @@ func resourceProjectGitRepo() *schema.Resource {
 			},
 			"is_example": {
 				Type: schema.TypeBool, Optional: true,
+			},
+			"git_release_mgmt_enabled": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Description: "Advanced Deploy Mode - Required for Webhook",
+			},
+			"deploy_secret": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Secret Value for Authentication Webhook",
+			},
+			"deploy_branch": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Description: "Branch which will be deployed to Production after " +
+					"creation of Project Resource. Required: Advanced Deploy Mode.",
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -115,6 +142,7 @@ func resourceProjectGitRepoRead(ctx context.Context, d *schema.ResourceData, m i
 	d.Set("git_production_branch_name", project.GitProductionBranchName)
 	d.Set("allow_warnings", project.AllowWarnings)
 	d.Set("is_example", project.IsExample)
+	d.Set("git_release_mgmt_enabled", project.GitReleaseMgmtEnabled)
 
 	tflog.Trace(ctx, fmt.Sprintf("Fn: %v, Action: end", currFuncName()))
 	return diags
@@ -158,19 +186,55 @@ func resourceProjectGitRepoCreate(ctx context.Context, d *schema.ResourceData, m
 	if value, ok := d.GetOk("is_example"); ok {
 		projectGitRepoUpdate.IsExample = boolPtr(value.(bool))
 	}
-	payload := lookergo.Project{}
-	payload.GitRemoteUrl = projectGitRepoUpdate.GitRemoteUrl
-	_, _, err = dc.Projects.Update(ctx, projectName, &payload)
-	if err != nil {
-		return diag.FromErr(err)
+	if value, ok := d.GetOk("git_release_mgmt_enabled"); ok {
+		projectGitRepoUpdate.GitReleaseMgmtEnabled = boolPtr(value.(bool))
 	}
+	if value, ok := d.GetOk("deploy_secret"); ok {
+		projectGitRepoUpdate.DeploySecret = value.(string)
+	}
+
+	if value, ok := d.GetOk("git_password"); ok {
+		payload := lookergo.Project{}
+		payload.GitRemoteUrl = projectGitRepoUpdate.GitRemoteUrl
+		projectGitRepoUpdate.GitPassword = value.(string)
+		payload.GitUsername = projectGitRepoUpdate.GitUsername
+		payload.GitPassword = projectGitRepoUpdate.GitPassword
+		payload.GitServiceName = projectGitRepoUpdate.GitServiceName
+		if !strings.HasPrefix(projectGitRepoUpdate.GitRemoteUrl, "https://") {
+			return diag.Errorf("HTTPS Authentication requires URL starts with http://..")
+		}
+		_, _, err = dc.Projects.Update(ctx, projectName, &payload)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+	} else {
+		payload := lookergo.Project{}
+		payload.GitRemoteUrl = projectGitRepoUpdate.GitRemoteUrl
+		if !strings.HasPrefix(projectGitRepoUpdate.GitRemoteUrl, "git@") && !strings.HasPrefix(payload.GitRemoteUrl, "ssh://") {
+			return diag.Errorf("SSH Authentication requires URL starts with git@.. or ssh://..")
+		}
+		_, _, err = dc.Projects.Update(ctx, projectName, &payload)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+	}
+
 	_, _, err = dc.Projects.Update(ctx, projectName, &projectGitRepoUpdate)
 	if err != nil {
 		return diagErrAppend(diags, err)
 	}
-	_, _, err = dc.Projects.DeployToProduction(ctx, projectName)
-	if err != nil {
-		return diag.FromErr(err)
+
+	if value, ok := d.GetOk("deploy_branch"); ok {
+		branchName := value.(string)
+		_, _, err = dc.Projects.GitBranchDeployToProduction(ctx, projectName, branchName)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+	} else {
+		_, _, err = dc.Projects.DeployToProduction(ctx, projectName)
+		if err != nil {
+			return diag.FromErr(err)
+		}
 	}
 	d.SetId(projectName)
 
@@ -216,14 +280,39 @@ func resourceProjectGitRepoUpdate(ctx context.Context, d *schema.ResourceData, m
 	if value, ok := d.GetOk("is_example"); ok {
 		projectGitRepoUpdate.IsExample = boolPtr(value.(bool))
 	}
+	if value, ok := d.GetOk("git_release_mgmt_enabled"); ok {
+		projectGitRepoUpdate.GitReleaseMgmtEnabled = boolPtr(value.(bool))
+	}
+	if value, ok := d.GetOk("deploy_secret"); ok {
+		projectGitRepoUpdate.DeploySecret = value.(string)
+	}
+	if value, ok := d.GetOk("git_password"); ok {
+		projectGitRepoUpdate.GitPassword = value.(string)
+		if !strings.HasPrefix(projectGitRepoUpdate.GitRemoteUrl, "https://") {
+			return diag.Errorf("HTTPS Authentication requires URL starts with http://..")
+		}
+	} else {
+		if !strings.HasPrefix(projectGitRepoUpdate.GitRemoteUrl, "git@") && !strings.HasPrefix(projectGitRepoUpdate.GitRemoteUrl, "ssh://") {
+			return diag.Errorf("SSH Authentication requires URL starts with git@.. or ssh://..")
+		}
+	}
 
 	_, _, err = dc.Projects.Update(ctx, projectName, &projectGitRepoUpdate)
 	if err != nil {
 		return diag.FromErr(err)
 	}
-	_, _, err = dc.Projects.DeployToProduction(ctx, projectName)
-	if err != nil {
-		return diag.FromErr(err)
+
+	if value, ok := d.GetOk("deploy_branch"); ok {
+		branchName := value.(string)
+		_, _, err = dc.Projects.GitBranchDeployToProduction(ctx, projectName, branchName)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+	} else {
+		_, _, err = dc.Projects.DeployToProduction(ctx, projectName)
+		if err != nil {
+			return diag.FromErr(err)
+		}
 	}
 	tflog.Trace(ctx, fmt.Sprintf("Fn: %v, Action: end", currFuncName()))
 	return resourceProjectGitRepoRead(ctx, d, m)
